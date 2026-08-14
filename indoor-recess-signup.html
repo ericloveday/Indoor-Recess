@@ -87,9 +87,11 @@
     font-weight:700;
     font-size:0.95rem;
     cursor:pointer;
-    display:flex;
+    display:inline-flex;
     align-items:center;
+    justify-content:center;
     gap:10px;
+    margin:0 auto;
   }
   #google-signin-btn:hover{background:#222;}
   input[type="text"]{
@@ -215,6 +217,12 @@
   .hidden{display:none !important;}
   .error-screen{color:var(--accent); font-weight:600; text-align:center; padding:40px 20px;}
   .loading{text-align:center; color:var(--muted); padding:40px; font-weight:600;}
+  .confirm-icon{
+    width:56px; height:56px; border-radius:50%; background:#eafaf0; color:var(--green);
+    display:flex; align-items:center; justify-content:center; font-size:1.6rem; font-weight:800;
+    margin:0 auto 14px;
+  }
+  .confirm-countdown{color:var(--muted); font-size:0.82rem; margin-top:14px;}
 </style>
 </head>
 <body>
@@ -265,6 +273,16 @@
 
   <div id="screen-loading" class="loading hidden">Loading...</div>
 
+  <!-- CONFIRMATION SCREEN -->
+  <div id="screen-confirm" class="hidden">
+    <div class="card" style="text-align:center; max-width:420px; margin:0 auto;">
+      <div class="confirm-icon">&#10003;</div>
+      <h2 id="confirm-message">Done!</h2>
+      <button class="btn-secondary" id="confirm-done-btn" style="margin-top:10px;">Done - Next Student</button>
+      <div class="confirm-countdown" id="confirm-countdown"></div>
+    </div>
+  </div>
+
 </div>
 
 <script type="module">
@@ -277,15 +295,15 @@ import { getDatabase, ref, get, set, remove, onValue } from "https://www.gstatic
 // (same config object used in your other tools - manager.html,
 // late-work-manager.html, etc. This is the SAME Firebase project.)
 // ============================================================
-  const firebaseConfig = {
-    apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
-    authDomain: "bathroom-check-out.firebaseapp.com",
-    databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
-    projectId: "bathroom-check-out",
-    storageBucket: "bathroom-check-out.firebasestorage.app",
-    messagingSenderId: "385219454253",
-    appId: "1:385219454253:web:970acbfe28672f73c45fa4"
-  };
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_API_KEY",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.appspot.com",
+  messagingSenderId: "PASTE_YOUR_SENDER_ID",
+  appId: "PASTE_YOUR_APP_ID"
+};
 
 const ALLOWED_DOMAIN = "cornerstonek12.org";
 const CAP_PER_ROOM = 27;
@@ -301,7 +319,8 @@ const screens = {
   signin: document.getElementById('screen-signin'),
   name: document.getElementById('screen-name'),
   rooms: document.getElementById('screen-rooms'),
-  loading: document.getElementById('screen-loading')
+  loading: document.getElementById('screen-loading'),
+  confirm: document.getElementById('screen-confirm')
 };
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
@@ -400,14 +419,7 @@ function renderNameList(query) {
   });
 }
 
-document.getElementById('switch-student').addEventListener('click', () => {
-  if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
-  selectedKey = null;
-  selectedName = null;
-  nameSearchInput.value = '';
-  showScreen('name');
-  renderNameList('');
-});
+document.getElementById('switch-student').addEventListener('click', resetToStart);
 
 function selectStudent(key) {
   selectedKey = key;
@@ -415,6 +427,40 @@ function selectStudent(key) {
   showScreen('rooms');
   listenToSignups();
 }
+
+// ---------- Confirmation + auto-reset (shared-device safety) ----------
+let countdownInterval = null;
+
+function resetToStart() {
+  if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+  if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
+  selectedKey = null;
+  selectedName = null;
+  nameSearchInput.value = '';
+  showScreen('name');
+  renderNameList('');
+}
+
+function showConfirmation(message) {
+  if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
+  document.getElementById('confirm-message').textContent = message;
+  showScreen('confirm');
+
+  let secondsLeft = 5;
+  const countdownEl = document.getElementById('confirm-countdown');
+  countdownEl.textContent = `Returning to start in ${secondsLeft}...`;
+  if (countdownInterval) clearInterval(countdownInterval);
+  countdownInterval = setInterval(() => {
+    secondsLeft--;
+    if (secondsLeft <= 0) {
+      resetToStart();
+    } else {
+      countdownEl.textContent = `Returning to start in ${secondsLeft}...`;
+    }
+  }, 1000);
+}
+
+document.getElementById('confirm-done-btn').addEventListener('click', resetToStart);
 
 // ---------- Room selection screen ----------
 function listenToSignups() {
@@ -471,6 +517,7 @@ function renderRooms(signups) {
     });
     document.getElementById('cancel-signup-btn').addEventListener('click', async () => {
       await remove(ref(db, 'indoorRecess/signups/' + selectedKey));
+      showConfirmation('Your sign-up has been cancelled.');
     });
   } else {
     statusEl.innerHTML = `<span class="current-badge" style="background:#eef1f6; color:var(--muted); border-color:var(--border);">${selectedName}</span>`;
@@ -521,6 +568,7 @@ async function attemptJoin(teacher, currentNamesInRoom) {
     room: teacher,
     signedUpAt: Date.now()
   });
+  showConfirmation(`You're signed up for ${teacher}'s room!`);
 }
 
 function findHomeTeacher(student) {
