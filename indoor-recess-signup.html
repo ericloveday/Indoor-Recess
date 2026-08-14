@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indoor Recess Sign-Up</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --black:#000000;
+    --accent:#ce1f07;
+    --bg:#f0f1f3;
+    --card:#ffffff;
+    --border:#e2e4e8;
+    --text:#1c1c1e;
+    --muted:#6b7280;
+    --green:#1f8a3d;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    font-family:'Montserrat',sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  .topbar{
+    background:var(--black);
+    color:#fff;
+    padding:18px 24px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+  }
+  .topbar h1{
+    font-size:1.15rem;
+    font-weight:800;
+    margin:0;
+    letter-spacing:0.3px;
+  }
+  .topbar .sub{
+    font-size:0.78rem;
+    color:#c9c9c9;
+    font-weight:500;
+    margin-top:2px;
+  }
+  #signout-btn{
+    background:transparent;
+    border:1px solid #555;
+    color:#fff;
+    padding:6px 12px;
+    border-radius:6px;
+    font-family:inherit;
+    font-size:0.8rem;
+    cursor:pointer;
+  }
+  #signout-btn:hover{background:#222;}
+  .wrap{
+    max-width:720px;
+    margin:0 auto;
+    padding:24px 16px 60px;
+  }
+  .card{
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:14px;
+    padding:24px;
+    margin-bottom:18px;
+    box-shadow:0 1px 3px rgba(0,0,0,0.04);
+  }
+  .center-screen{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:70vh;
+  }
+  h2{font-size:1.3rem; font-weight:700; margin:0 0 6px;}
+  p.desc{color:var(--muted); font-size:0.92rem; margin:0 0 18px;}
+  #google-signin-btn{
+    background:var(--black);
+    color:#fff;
+    border:none;
+    padding:14px 28px;
+    border-radius:8px;
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.95rem;
+    cursor:pointer;
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  #google-signin-btn:hover{background:#222;}
+  input[type="text"]{
+    width:100%;
+    padding:12px 14px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-family:inherit;
+    font-size:0.95rem;
+    margin-bottom:12px;
+  }
+  input[type="text"]:focus{outline:2px solid var(--accent); border-color:var(--accent);}
+  .name-list{
+    max-height:340px;
+    overflow-y:auto;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+  }
+  .name-item{
+    background:var(--bg);
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:12px 14px;
+    cursor:pointer;
+    font-weight:600;
+    font-size:0.95rem;
+    transition:background 0.1s;
+  }
+  .name-item:hover{background:#e7e9ed; border-color:var(--accent);}
+  .room-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:14px;
+  }
+  @media(max-width:520px){.room-grid{grid-template-columns:1fr;}}
+  .room-card{
+    border:1px solid var(--border);
+    border-radius:12px;
+    padding:18px;
+    text-align:center;
+    background:var(--bg);
+  }
+  .room-card h3{margin:0 0 4px; font-size:1.05rem; font-weight:800;}
+  .room-count{
+    font-size:0.85rem;
+    color:var(--muted);
+    margin-bottom:12px;
+    font-weight:600;
+  }
+  .room-count.full{color:var(--accent);}
+  .join-btn{
+    width:100%;
+    padding:10px;
+    border:none;
+    border-radius:8px;
+    background:var(--accent);
+    color:#fff;
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.9rem;
+    cursor:pointer;
+  }
+  .join-btn:hover{background:#a71805;}
+  .join-btn:disabled{
+    background:#c7c9ce;
+    cursor:not-allowed;
+  }
+  .full-tag{
+    font-size:0.78rem;
+    color:var(--accent);
+    font-weight:700;
+  }
+  .current-badge{
+    display:inline-block;
+    background:#eafaf0;
+    color:var(--green);
+    border:1px solid #bfe8cd;
+    padding:3px 10px;
+    border-radius:20px;
+    font-size:0.78rem;
+    font-weight:700;
+    margin-bottom:10px;
+  }
+  .btn-row{display:flex; gap:10px; margin-top:14px;}
+  .btn-secondary{
+    flex:1;
+    padding:11px;
+    border-radius:8px;
+    border:1px solid var(--border);
+    background:#fff;
+    font-family:inherit;
+    font-weight:700;
+    font-size:0.88rem;
+    cursor:pointer;
+  }
+  .btn-secondary:hover{background:var(--bg);}
+  .btn-danger{color:var(--accent); border-color:#f0c4bc;}
+  .btn-danger:hover{background:#fdf1ef;}
+  .switch-link{
+    display:block;
+    text-align:center;
+    margin-top:14px;
+    color:var(--muted);
+    font-size:0.85rem;
+    text-decoration:underline;
+    cursor:pointer;
+    background:none;
+    border:none;
+    font-family:inherit;
+  }
+  .warning-box{
+    background:#fff4f2;
+    border:1px solid #f0c4bc;
+    color:var(--accent);
+    padding:12px 14px;
+    border-radius:8px;
+    font-size:0.88rem;
+    font-weight:600;
+    margin-bottom:14px;
+    display:none;
+  }
+  .hidden{display:none !important;}
+  .error-screen{color:var(--accent); font-weight:600; text-align:center; padding:40px 20px;}
+  .loading{text-align:center; color:var(--muted); padding:40px; font-weight:600;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>Indoor Recess Sign-Up</h1>
+    <div class="sub">Cornerstone Charter Academy &middot; 7th Grade</div>
+  </div>
+  <button id="signout-btn" class="hidden">Sign Out</button>
+</div>
+
+<div class="wrap">
+
+  <!-- SIGN IN SCREEN -->
+  <div id="screen-signin" class="center-screen">
+    <div class="card" style="text-align:center; max-width:400px;">
+      <h2>Sign in to continue</h2>
+      <p class="desc">Use your Cornerstone Google account to sign up for indoor recess.</p>
+      <button id="google-signin-btn">Sign in with Google</button>
+      <div id="signin-error" class="error-screen hidden"></div>
+    </div>
+  </div>
+
+  <!-- NAME SEARCH SCREEN -->
+  <div id="screen-name" class="hidden">
+    <div class="card">
+      <h2>Who are you?</h2>
+      <p class="desc">Start typing your first or last name.</p>
+      <input type="text" id="name-search" placeholder="Type your name...">
+      <div class="name-list" id="name-list"></div>
+    </div>
+  </div>
+
+  <!-- ROOM SELECTION SCREEN -->
+  <div id="screen-rooms" class="hidden">
+    <div class="card">
+      <div id="current-status"></div>
+      <div id="warning-box" class="warning-box"></div>
+      <div id="room-section">
+        <h2 id="room-heading">Pick a room</h2>
+        <p class="desc" id="room-sub">Rooms close automatically at 27 students.</p>
+        <div class="room-grid" id="room-grid"></div>
+      </div>
+    </div>
+    <button class="switch-link" id="switch-student">Not you? Switch student</button>
+  </div>
+
+  <div id="screen-loading" class="loading hidden">Loading...</div>
+
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getDatabase, ref, get, set, remove, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ============================================================
+// PASTE YOUR EXISTING bathroom-check-out FIREBASE CONFIG HERE
+// (same config object used in your other tools - manager.html,
+// late-work-manager.html, etc. This is the SAME Firebase project.)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_API_KEY",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.appspot.com",
+  messagingSenderId: "PASTE_YOUR_SENDER_ID",
+  appId: "PASTE_YOUR_APP_ID"
+};
+
+const ALLOWED_DOMAIN = "cornerstonek12.org";
+const CAP_PER_ROOM = 27;
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
+
+// ---------- Screen helpers ----------
+const screens = {
+  signin: document.getElementById('screen-signin'),
+  name: document.getElementById('screen-name'),
+  rooms: document.getElementById('screen-rooms'),
+  loading: document.getElementById('screen-loading')
+};
+function showScreen(name) {
+  Object.values(screens).forEach(s => s.classList.add('hidden'));
+  screens[name].classList.remove('hidden');
+}
+
+const signoutBtn = document.getElementById('signout-btn');
+signoutBtn.addEventListener('click', () => signOut(auth));
+
+document.getElementById('google-signin-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('signin-error');
+  errEl.classList.add('hidden');
+  try {
+    await signInWithPopup(auth, provider);
+  } catch (e) {
+    errEl.textContent = "Sign-in failed. Please try again.";
+    errEl.classList.remove('hidden');
+  }
+});
+
+// ---------- State ----------
+let rosterFull = {};       // full bathroom/roster
+let roster7 = {};          // filtered to grade 7, keyed by roster key
+let teachers7 = [];        // grade-7 teacher names
+let conflictBlocks = {};   // bathroom/conflictBlocks
+let selectedKey = null;    // currently selected roster key (this student)
+let selectedName = null;   // display name e.g. "Aaradhna R."
+let signupsUnsub = null;
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    showScreen('signin');
+    signoutBtn.classList.add('hidden');
+    return;
+  }
+  if (!user.email || !user.email.endsWith('@' + ALLOWED_DOMAIN)) {
+    await signOut(auth);
+    const errEl = document.getElementById('signin-error');
+    errEl.textContent = "Please sign in with your @" + ALLOWED_DOMAIN + " account.";
+    errEl.classList.remove('hidden');
+    showScreen('signin');
+    return;
+  }
+  signoutBtn.classList.remove('hidden');
+  showScreen('loading');
+  await loadData();
+  showScreen('name');
+  renderNameList('');
+});
+
+async function loadData() {
+  const [rosterSnap, teacherSnap, conflictSnap] = await Promise.all([
+    get(ref(db, 'bathroom/roster')),
+    get(ref(db, 'bathroom/teachers')),
+    get(ref(db, 'bathroom/conflictBlocks'))
+  ]);
+  rosterFull = rosterSnap.val() || {};
+  const teachersFull = teacherSnap.val() || {};
+  conflictBlocks = conflictSnap.val() || {};
+
+  roster7 = {};
+  Object.keys(rosterFull).forEach(k => {
+    if (Number(rosterFull[k].grade) === 7) roster7[k] = rosterFull[k];
+  });
+
+  teachers7 = Object.keys(teachersFull)
+    .filter(t => Number(teachersFull[t].grade) === 7)
+    .sort();
+}
+
+// ---------- Name search screen ----------
+const nameSearchInput = document.getElementById('name-search');
+nameSearchInput.addEventListener('input', () => renderNameList(nameSearchInput.value));
+
+function renderNameList(query) {
+  const list = document.getElementById('name-list');
+  list.innerHTML = '';
+  const q = query.trim().toLowerCase();
+  const matches = Object.keys(roster7)
+    .filter(k => roster7[k].name.toLowerCase().includes(q) ||
+                 roster7[k].firstName.toLowerCase().includes(q) ||
+                 roster7[k].lastName.toLowerCase().includes(q))
+    .sort((a,b) => roster7[a].name.localeCompare(roster7[b].name))
+    .slice(0, 40);
+
+  if (matches.length === 0) {
+    list.innerHTML = '<div style="color:var(--muted); padding:10px; font-size:0.9rem;">No matches yet - keep typing.</div>';
+    return;
+  }
+  matches.forEach(k => {
+    const div = document.createElement('div');
+    div.className = 'name-item';
+    div.textContent = roster7[k].name;
+    div.addEventListener('click', () => selectStudent(k));
+    list.appendChild(div);
+  });
+}
+
+document.getElementById('switch-student').addEventListener('click', () => {
+  if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
+  selectedKey = null;
+  selectedName = null;
+  nameSearchInput.value = '';
+  showScreen('name');
+  renderNameList('');
+});
+
+function selectStudent(key) {
+  selectedKey = key;
+  selectedName = roster7[key].name;
+  showScreen('rooms');
+  listenToSignups();
+}
+
+// ---------- Room selection screen ----------
+function listenToSignups() {
+  if (signupsUnsub) signupsUnsub();
+  signupsUnsub = onValue(ref(db, 'indoorRecess/signups'), (snap) => {
+    renderRooms(snap.val() || {});
+  });
+}
+
+function getBlockedNamesFor(name) {
+  const blocked = new Set();
+  Object.values(conflictBlocks).forEach(b => {
+    if (!b) return;
+    if (b.name === name) blocked.add(b.blockedGroupmate);
+    if (b.blockedGroupmate === name) blocked.add(b.name);
+  });
+  return blocked;
+}
+
+function renderRooms(signups) {
+  const roomHeading = document.getElementById('room-heading');
+  const roomSub = document.getElementById('room-sub');
+  const statusEl = document.getElementById('current-status');
+  const warningBox = document.getElementById('warning-box');
+  warningBox.style.display = 'none';
+
+  // Count per room + collect names per room
+  const counts = {};
+  const namesInRoom = {};
+  teachers7.forEach(t => { counts[t] = 0; namesInRoom[t] = []; });
+  let mySignup = null;
+
+  Object.entries(signups).forEach(([key, s]) => {
+    if (!s || !s.room) return;
+    if (counts[s.room] === undefined) { counts[s.room] = 0; namesInRoom[s.room] = []; }
+    counts[s.room]++;
+    namesInRoom[s.room].push(s.name);
+    if (key === selectedKey) mySignup = s;
+  });
+
+  // Status banner
+  if (mySignup) {
+    statusEl.innerHTML = `<span class="current-badge">Signed up as ${selectedName}</span>
+      <h2 style="margin-top:6px;">You're in ${mySignup.room}'s room</h2>
+      <div class="btn-row">
+        <button class="btn-secondary" id="change-room-btn">Change Room</button>
+        <button class="btn-secondary btn-danger" id="cancel-signup-btn">Cancel Sign-Up</button>
+      </div>`;
+    document.getElementById('room-section').classList.add('hidden');
+    document.getElementById('change-room-btn').addEventListener('click', () => {
+      document.getElementById('room-section').classList.remove('hidden');
+      roomHeading.textContent = 'Choose a new room';
+      buildRoomGrid(counts, namesInRoom, true);
+    });
+    document.getElementById('cancel-signup-btn').addEventListener('click', async () => {
+      await remove(ref(db, 'indoorRecess/signups/' + selectedKey));
+    });
+  } else {
+    statusEl.innerHTML = `<span class="current-badge" style="background:#eef1f6; color:var(--muted); border-color:var(--border);">${selectedName}</span>`;
+    document.getElementById('room-section').classList.remove('hidden');
+    roomHeading.textContent = 'Pick a room';
+    roomSub.textContent = 'Rooms close automatically at ' + CAP_PER_ROOM + ' students.';
+    buildRoomGrid(counts, namesInRoom, false);
+  }
+}
+
+function buildRoomGrid(counts, namesInRoom, isChanging) {
+  const grid = document.getElementById('room-grid');
+  grid.innerHTML = '';
+  teachers7.forEach(teacher => {
+    const count = counts[teacher] || 0;
+    const isFull = count >= CAP_PER_ROOM;
+    const div = document.createElement('div');
+    div.className = 'room-card';
+    div.innerHTML = `
+      <h3>${teacher}</h3>
+      <div class="room-count ${isFull ? 'full' : ''}">${count}/${CAP_PER_ROOM}${isFull ? ' &middot; <span class="full-tag">FULL</span>' : ''}</div>
+      <button class="join-btn" ${isFull ? 'disabled' : ''}>${isFull ? 'Room Full' : (isChanging ? 'Move Here' : 'Join Room')}</button>
+    `;
+    if (!isFull) {
+      div.querySelector('.join-btn').addEventListener('click', () => attemptJoin(teacher, namesInRoom[teacher] || []));
+    }
+    grid.appendChild(div);
+  });
+}
+
+async function attemptJoin(teacher, currentNamesInRoom) {
+  const blocked = getBlockedNamesFor(selectedName);
+  const conflict = currentNamesInRoom.find(n => blocked.has(n));
+  const warningBox = document.getElementById('warning-box');
+
+  if (conflict) {
+    warningBox.style.display = 'block';
+    warningBox.textContent = "You can't join this room right now - please pick a different room or check with your teacher.";
+    return;
+  }
+
+  warningBox.style.display = 'none';
+  const student = roster7[selectedKey];
+  await set(ref(db, 'indoorRecess/signups/' + selectedKey), {
+    name: student.name,
+    gender: student.gender,
+    homeTeacher: findHomeTeacher(student),
+    room: teacher,
+    signedUpAt: Date.now()
+  });
+}
+
+function findHomeTeacher(student) {
+  // roster entries don't store a homeroom teacher field directly in the
+  // bathroom/roster node, so this is left blank unless you add one.
+  return student.homeTeacher || '';
+}
+</script>
+</body>
+</html>

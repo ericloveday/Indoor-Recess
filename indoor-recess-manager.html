@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Indoor Recess - Manager</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --black:#000000;
+    --accent:#ce1f07;
+    --bg:#f0f1f3;
+    --card:#ffffff;
+    --border:#e2e4e8;
+    --text:#1c1c1e;
+    --muted:#6b7280;
+    --green:#1f8a3d;
+    --amber:#b8860b;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0; font-family:'Montserrat',sans-serif; background:var(--bg); color:var(--text);}
+  .topbar{
+    background:var(--black); color:#fff; padding:16px 24px;
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+  }
+  .topbar h1{font-size:1.15rem; font-weight:800; margin:0;}
+  .topbar .sub{font-size:0.78rem; color:#c9c9c9; font-weight:500;}
+  .topbar-actions{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  .btn{
+    font-family:inherit; font-weight:700; font-size:0.82rem; padding:8px 14px;
+    border-radius:7px; cursor:pointer; border:1px solid transparent;
+  }
+  .btn-dark{background:transparent; border:1px solid #555; color:#fff;}
+  .btn-dark:hover{background:#222;}
+  .btn-accent{background:var(--accent); color:#fff;}
+  .btn-accent:hover{background:#a71805;}
+  .btn-outline{background:#fff; border:1px solid var(--border); color:var(--text);}
+  .btn-outline:hover{background:var(--bg);}
+  .wrap{max-width:1200px; margin:0 auto; padding:24px 16px 60px;}
+  .center-screen{display:flex; align-items:center; justify-content:center; min-height:70vh;}
+  .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);}
+  h2{font-size:1.2rem; font-weight:700; margin:0 0 6px;}
+  p.desc{color:var(--muted); font-size:0.9rem; margin:0 0 16px;}
+  #google-signin-btn{background:var(--black); color:#fff; border:none; padding:14px 28px; border-radius:8px; font-family:inherit; font-weight:700; font-size:0.95rem; cursor:pointer;}
+  .hidden{display:none !important;}
+  .loading{text-align:center; color:var(--muted); padding:40px; font-weight:600;}
+  .error-screen{color:var(--accent); font-weight:600; text-align:center; padding:20px;}
+
+  .summary-bar{
+    display:flex; gap:14px; margin-bottom:18px; flex-wrap:wrap;
+  }
+  .summary-pill{
+    background:#fff; border:1px solid var(--border); border-radius:10px;
+    padding:12px 18px; font-weight:700; font-size:0.9rem;
+  }
+  .summary-pill span{color:var(--muted); font-weight:500; font-size:0.78rem; display:block;}
+
+  .room-columns{
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(260px, 1fr));
+    gap:16px;
+  }
+  .room-col{background:#fff; border:1px solid var(--border); border-radius:12px; padding:16px; display:flex; flex-direction:column;}
+  .room-col-header{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+  .room-col-header h3{margin:0; font-size:1.05rem; font-weight:800;}
+  .count-badge{font-size:0.82rem; font-weight:700; padding:3px 10px; border-radius:20px; background:#eef1f6; color:var(--muted);}
+  .count-badge.full{background:#fdecea; color:var(--accent);}
+  .student-row{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:8px 10px; border-radius:7px; background:var(--bg); margin-bottom:6px; font-size:0.88rem; font-weight:600;
+  }
+  .student-row.conflict{background:#fdecea; border:1px solid #f0c4bc;}
+  .student-name-wrap{display:flex; align-items:center; gap:6px;}
+  .conflict-flag{color:var(--accent); font-weight:800; cursor:help;}
+  .remove-x{
+    background:none; border:none; color:var(--muted); cursor:pointer; font-size:1rem; font-weight:800; line-height:1; padding:2px 6px;
+  }
+  .remove-x:hover{color:var(--accent);}
+  .empty-room{color:var(--muted); font-size:0.85rem; padding:10px 0; text-align:center;}
+  .add-student-row{margin-top:8px; position:relative;}
+  .add-student-input{
+    width:100%; padding:9px 10px; border:1px solid var(--border); border-radius:7px; font-family:inherit; font-size:0.85rem;
+  }
+  .add-dropdown{
+    position:absolute; top:100%; left:0; right:0; background:#fff; border:1px solid var(--border);
+    border-radius:8px; max-height:200px; overflow-y:auto; z-index:5; box-shadow:0 4px 12px rgba(0,0,0,0.08);
+  }
+  .add-dropdown-item{padding:9px 12px; font-size:0.85rem; font-weight:600; cursor:pointer;}
+  .add-dropdown-item:hover{background:var(--bg);}
+
+  .history-list{display:flex; flex-direction:column; gap:8px;}
+  .history-item{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:12px 14px; background:var(--bg); border-radius:8px; font-weight:600; font-size:0.9rem; cursor:pointer;
+  }
+  .history-item:hover{background:#e7e9ed;}
+  .history-detail{margin-top:10px; padding:14px; background:#fff; border:1px solid var(--border); border-radius:10px; display:none;}
+  .history-room-block{margin-bottom:10px;}
+  .history-room-block h4{margin:0 0 4px; font-size:0.9rem;}
+  .history-room-block ul{margin:0; padding-left:18px; font-size:0.85rem; color:var(--text);}
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.45); display:flex; align-items:center; justify-content:center; z-index:50;
+  }
+  .modal{background:#fff; border-radius:12px; padding:24px; max-width:380px; width:90%;}
+  .modal h3{margin:0 0 8px;}
+  .modal p{color:var(--muted); font-size:0.9rem;}
+  .modal-actions{display:flex; gap:10px; margin-top:16px;}
+  .modal-actions .btn{flex:1;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <h1>Indoor Recess - Manager Dashboard</h1>
+    <div class="sub">Cornerstone Charter Academy &middot; 7th Grade Team</div>
+  </div>
+  <div class="topbar-actions hidden" id="topbar-actions">
+    <button class="btn btn-outline" id="export-csv-btn">Export CSV</button>
+    <button class="btn btn-outline" id="toggle-history-btn">Past Sessions</button>
+    <button class="btn btn-accent" id="end-session-btn">End Session</button>
+    <button class="btn btn-dark" id="signout-btn">Sign Out</button>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div id="screen-signin" class="center-screen">
+    <div class="card" style="text-align:center; max-width:400px;">
+      <h2>Sign in to continue</h2>
+      <p class="desc">Use your Cornerstone Google account.</p>
+      <button id="google-signin-btn">Sign in with Google</button>
+      <div id="signin-error" class="error-screen hidden"></div>
+    </div>
+  </div>
+
+  <div id="screen-loading" class="loading hidden">Loading...</div>
+
+  <div id="screen-dashboard" class="hidden">
+    <div class="summary-bar" id="summary-bar"></div>
+    <div class="room-columns" id="room-columns"></div>
+
+    <div class="card hidden" id="history-card">
+      <h2>Past Sessions</h2>
+      <p class="desc">Click a session to see who went where that day.</p>
+      <div class="history-list" id="history-list"></div>
+    </div>
+  </div>
+
+</div>
+
+<div id="modal-root"></div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getDatabase, ref, get, set, remove, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+// ============================================================
+// PASTE YOUR EXISTING bathroom-check-out FIREBASE CONFIG HERE
+// (same object used across your other manager tools)
+// ============================================================
+const firebaseConfig = {
+  apiKey: "PASTE_YOUR_API_KEY",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.appspot.com",
+  messagingSenderId: "PASTE_YOUR_SENDER_ID",
+  appId: "PASTE_YOUR_APP_ID"
+};
+
+const ALLOWED_DOMAIN = "cornerstonek12.org";
+const CAP_PER_ROOM = 27;
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getDatabase(app);
+const provider = new GoogleAuthProvider();
+provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
+
+const screens = {
+  signin: document.getElementById('screen-signin'),
+  loading: document.getElementById('screen-loading'),
+  dashboard: document.getElementById('screen-dashboard')
+};
+function showScreen(name){ Object.values(screens).forEach(s=>s.classList.add('hidden')); screens[name].classList.remove('hidden'); }
+
+document.getElementById('signout-btn').addEventListener('click', () => signOut(auth));
+document.getElementById('google-signin-btn').addEventListener('click', async () => {
+  const errEl = document.getElementById('signin-error');
+  errEl.classList.add('hidden');
+  try { await signInWithPopup(auth, provider); }
+  catch(e){ errEl.textContent = "Sign-in failed. Please try again."; errEl.classList.remove('hidden'); }
+});
+
+let roster7 = {};
+let teachers7 = [];
+let conflictBlocks = {};
+let currentSignups = {};
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) { showScreen('signin'); document.getElementById('topbar-actions').classList.add('hidden'); return; }
+  if (!user.email || !user.email.endsWith('@' + ALLOWED_DOMAIN)) {
+    await signOut(auth);
+    const errEl = document.getElementById('signin-error');
+    errEl.textContent = "Please sign in with your @" + ALLOWED_DOMAIN + " account.";
+    errEl.classList.remove('hidden');
+    showScreen('signin');
+    return;
+  }
+  document.getElementById('topbar-actions').classList.remove('hidden');
+  showScreen('loading');
+  await loadStaticData();
+  showScreen('dashboard');
+  listenToSignups();
+});
+
+async function loadStaticData() {
+  const [rosterSnap, teacherSnap, conflictSnap] = await Promise.all([
+    get(ref(db, 'bathroom/roster')),
+    get(ref(db, 'bathroom/teachers')),
+    get(ref(db, 'bathroom/conflictBlocks'))
+  ]);
+  const rosterFull = rosterSnap.val() || {};
+  const teachersFull = teacherSnap.val() || {};
+  conflictBlocks = conflictSnap.val() || {};
+
+  roster7 = {};
+  Object.keys(rosterFull).forEach(k => { if (Number(rosterFull[k].grade) === 7) roster7[k] = rosterFull[k]; });
+  teachers7 = Object.keys(teachersFull).filter(t => Number(teachersFull[t].grade) === 7).sort();
+}
+
+function listenToSignups() {
+  onValue(ref(db, 'indoorRecess/signups'), (snap) => {
+    currentSignups = snap.val() || {};
+    renderDashboard();
+  });
+}
+
+function getBlockedNamesFor(name) {
+  const blocked = new Set();
+  Object.values(conflictBlocks).forEach(b => {
+    if (!b) return;
+    if (b.name === name) blocked.add(b.blockedGroupmate);
+    if (b.blockedGroupmate === name) blocked.add(b.name);
+  });
+  return blocked;
+}
+
+function renderDashboard() {
+  // Group signups by room
+  const byRoom = {};
+  teachers7.forEach(t => byRoom[t] = []);
+  Object.entries(currentSignups).forEach(([key, s]) => {
+    if (!s || !s.room) return;
+    if (!byRoom[s.room]) byRoom[s.room] = [];
+    byRoom[s.room].push({ key, ...s });
+  });
+
+  const totalSignedUp = Object.keys(currentSignups).length;
+  const totalRoster = Object.keys(roster7).length;
+  const summaryBar = document.getElementById('summary-bar');
+  summaryBar.innerHTML = `
+    <div class="summary-pill">${totalSignedUp}<span>Signed Up</span></div>
+    <div class="summary-pill">${totalRoster - totalSignedUp}<span>Not Signed Up</span></div>
+    <div class="summary-pill">${teachers7.length}<span>Rooms</span></div>
+  `;
+
+  const colsWrap = document.getElementById('room-columns');
+  colsWrap.innerHTML = '';
+
+  teachers7.forEach(teacher => {
+    const students = (byRoom[teacher] || []).sort((a,b) => a.name.localeCompare(b.name));
+    const namesInRoom = students.map(s => s.name);
+    const count = students.length;
+    const isFull = count >= CAP_PER_ROOM;
+
+    const col = document.createElement('div');
+    col.className = 'room-col';
+
+    let rowsHtml = '';
+    if (students.length === 0) {
+      rowsHtml = '<div class="empty-room">No one signed up yet</div>';
+    } else {
+      students.forEach(s => {
+        const blocked = getBlockedNamesFor(s.name);
+        const hasConflict = namesInRoom.some(n => n !== s.name && blocked.has(n));
+        rowsHtml += `
+          <div class="student-row ${hasConflict ? 'conflict' : ''}" data-key="${s.key}">
+            <span class="student-name-wrap">
+              ${hasConflict ? '<span class="conflict-flag" title="Conflict: a blocked groupmate is in this room">&#9888;</span>' : ''}
+              ${s.name}
+            </span>
+            <button class="remove-x" data-key="${s.key}" title="Remove">&times;</button>
+          </div>`;
+      });
+    }
+
+    col.innerHTML = `
+      <div class="room-col-header">
+        <h3>${teacher}</h3>
+        <span class="count-badge ${isFull ? 'full' : ''}">${count}/${CAP_PER_ROOM}</span>
+      </div>
+      <div class="student-list">${rowsHtml}</div>
+      <div class="add-student-row">
+        <input type="text" class="add-student-input" placeholder="+ Add student..." data-room="${teacher}">
+        <div class="add-dropdown hidden"></div>
+      </div>
+    `;
+    colsWrap.appendChild(col);
+  });
+
+  // Wire remove buttons
+  colsWrap.querySelectorAll('.remove-x').forEach(btn => {
+    btn.addEventListener('click', () => remove(ref(db, 'indoorRecess/signups/' + btn.dataset.key)));
+  });
+
+  // Wire add-student search per room
+  colsWrap.querySelectorAll('.add-student-input').forEach(input => {
+    const dropdown = input.nextElementSibling;
+    input.addEventListener('input', () => {
+      const q = input.value.trim().toLowerCase();
+      dropdown.innerHTML = '';
+      if (!q) { dropdown.classList.add('hidden'); return; }
+      const matches = Object.entries(roster7)
+        .filter(([k,v]) => v.name.toLowerCase().includes(q))
+        .slice(0, 12);
+      if (matches.length === 0) { dropdown.classList.add('hidden'); return; }
+      dropdown.classList.remove('hidden');
+      matches.forEach(([k,v]) => {
+        const item = document.createElement('div');
+        item.className = 'add-dropdown-item';
+        const currentRoom = currentSignups[k] ? currentSignups[k].room : null;
+        item.textContent = v.name + (currentRoom ? ' (currently: ' + currentRoom + ')' : '');
+        item.addEventListener('click', () => {
+          addStudentToRoom(k, v, input.dataset.room, currentRoom);
+          input.value = '';
+          dropdown.classList.add('hidden');
+        });
+        dropdown.appendChild(item);
+      });
+    });
+  });
+}
+
+async function addStudentToRoom(key, student, room, currentRoom) {
+  if (currentRoom && currentRoom !== room) {
+    const confirmed = await showConfirmModal(
+      'Move student?',
+      `${student.name} is currently in ${currentRoom}'s room. Move them to ${room}'s room instead?`
+    );
+    if (!confirmed) return;
+  }
+  await set(ref(db, 'indoorRecess/signups/' + key), {
+    name: student.name,
+    gender: student.gender,
+    homeTeacher: student.homeTeacher || '',
+    room: room,
+    signedUpAt: Date.now()
+  });
+}
+
+// ---------- Confirm modal ----------
+function showConfirmModal(title, message) {
+  return new Promise((resolve) => {
+    const root = document.getElementById('modal-root');
+    root.innerHTML = `
+      <div class="modal-overlay">
+        <div class="modal">
+          <h3>${title}</h3>
+          <p>${message}</p>
+          <div class="modal-actions">
+            <button class="btn btn-outline" id="modal-cancel">Cancel</button>
+            <button class="btn btn-accent" id="modal-confirm">Confirm</button>
+          </div>
+        </div>
+      </div>`;
+    document.getElementById('modal-cancel').addEventListener('click', () => { root.innerHTML=''; resolve(false); });
+    document.getElementById('modal-confirm').addEventListener('click', () => { root.innerHTML=''; resolve(true); });
+  });
+}
+
+// ---------- End Session (archive + clear) ----------
+document.getElementById('end-session-btn').addEventListener('click', async () => {
+  const count = Object.keys(currentSignups).length;
+  if (count === 0) {
+    await showConfirmModal('Nothing to archive', 'No students are currently signed up.');
+    return;
+  }
+  const confirmed = await showConfirmModal(
+    'End this session?',
+    `This will archive today's ${count} sign-ups to Past Sessions and clear the board for the next rain day.`
+  );
+  if (!confirmed) return;
+
+  const dateLabel = new Date().toLocaleDateString('en-US', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
+  const historyRef = push(ref(db, 'indoorRecess/history'));
+  await set(historyRef, {
+    date: dateLabel,
+    archivedAt: Date.now(),
+    signups: currentSignups
+  });
+  await remove(ref(db, 'indoorRecess/signups'));
+});
+
+// ---------- CSV Export ----------
+document.getElementById('export-csv-btn').addEventListener('click', () => {
+  exportCsv(currentSignups, 'indoor-recess-' + new Date().toISOString().slice(0,10) + '.csv');
+});
+
+function exportCsv(signupsObj, filename) {
+  const rows = [['Name','Gender','Room','Signed Up At']];
+  Object.values(signupsObj).forEach(s => {
+    rows.push([
+      s.name || '',
+      s.gender || '',
+      s.room || '',
+      s.signedUpAt ? new Date(s.signedUpAt).toLocaleString() : ''
+    ]);
+  });
+  const csv = rows.map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ---------- Past Sessions ----------
+document.getElementById('toggle-history-btn').addEventListener('click', async () => {
+  const card = document.getElementById('history-card');
+  card.classList.toggle('hidden');
+  if (!card.classList.contains('hidden')) await loadHistory();
+});
+
+async function loadHistory() {
+  const snap = await get(ref(db, 'indoorRecess/history'));
+  const history = snap.val() || {};
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  const entries = Object.entries(history).sort((a,b) => (b[1].archivedAt||0) - (a[1].archivedAt||0));
+
+  if (entries.length === 0) {
+    list.innerHTML = '<div class="empty-room">No past sessions yet.</div>';
+    return;
+  }
+
+  entries.forEach(([id, session]) => {
+    const count = Object.keys(session.signups || {}).length;
+    const item = document.createElement('div');
+    item.className = 'history-item';
+    item.innerHTML = `<span>${session.date}</span><span>${count} students</span>`;
+    const detail = document.createElement('div');
+    detail.className = 'history-detail';
+
+    const byRoom = {};
+    Object.values(session.signups || {}).forEach(s => {
+      if (!byRoom[s.room]) byRoom[s.room] = [];
+      byRoom[s.room].push(s.name);
+    });
+    let html = '';
+    Object.keys(byRoom).sort().forEach(room => {
+      html += `<div class="history-room-block"><h4>${room} (${byRoom[room].length})</h4><ul>${byRoom[room].sort().map(n=>`<li>${n}</li>`).join('')}</ul></div>`;
+    });
+    html += `<button class="btn btn-outline" id="export-${id}">Export This Session</button>`;
+    detail.innerHTML = html;
+
+    item.addEventListener('click', () => { detail.style.display = detail.style.display === 'block' ? 'none' : 'block'; });
+    list.appendChild(item);
+    list.appendChild(detail);
+
+    setTimeout(() => {
+      const btn = document.getElementById('export-' + id);
+      if (btn) btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        exportCsv(session.signups || {}, 'indoor-recess-' + session.date.replace(/[^a-z0-9]/gi,'-') + '.csv');
+      });
+    }, 0);
+  });
+}
+</script>
+</body>
+</html>
