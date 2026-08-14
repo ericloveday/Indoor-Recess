@@ -156,21 +156,22 @@
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
-import { getDatabase, ref, get, set, remove, update, push, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+import { getDatabase, ref, get, set, remove, update, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
 // ============================================================
 // PASTE YOUR EXISTING bathroom-check-out FIREBASE CONFIG HERE
 // (same object used across your other manager tools)
 // ============================================================
-  const firebaseConfig = {
-    apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
-    authDomain: "bathroom-check-out.firebaseapp.com",
-    databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
-    projectId: "bathroom-check-out",
-    storageBucket: "bathroom-check-out.firebasestorage.app",
-    messagingSenderId: "385219454253",
-    appId: "1:385219454253:web:970acbfe28672f73c45fa4"
-  };
+const firebaseConfig = {
+  apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
+  authDomain: "bathroom-check-out.firebaseapp.com",
+  databaseURL: "https://bathroom-check-out-default-rtdb.firebaseio.com",
+  projectId: "bathroom-check-out",
+  storageBucket: "bathroom-check-out.firebasestorage.app",
+  messagingSenderId: "385219454253",
+  appId: "1:385219454253:web:970acbfe28672f73c45fa4"
+};
+
 const ALLOWED_DOMAIN = "cornerstonek12.org";
 const CAP_PER_ROOM = 27;
 
@@ -213,6 +214,7 @@ onAuthStateChanged(auth, async (user) => {
   document.getElementById('topbar-actions').classList.remove('hidden');
   showScreen('loading');
   await loadStaticData();
+  await autoEndStaleSessionIfNeeded();
   showScreen('dashboard');
   listenToSignups();
 });
@@ -230,6 +232,38 @@ async function loadStaticData() {
   roster7 = {};
   Object.keys(rosterFull).forEach(k => { if (Number(rosterFull[k].grade) === 7) roster7[k] = rosterFull[k]; });
   teachers7 = Object.keys(teachersFull).filter(t => Number(teachersFull[t].grade) === 7).sort();
+}
+
+// ---------- Auto-end stale sessions (after 2:30pm on the day they started) ----------
+async function autoEndStaleSessionIfNeeded() {
+  const snap = await get(ref(db, 'indoorRecess/signups'));
+  const signups = snap.val();
+  if (!signups || Object.keys(signups).length === 0) return;
+
+  const timestamps = Object.values(signups).map(s => s.signedUpAt).filter(Boolean);
+  if (timestamps.length === 0) return;
+
+  const earliest = new Date(Math.min(...timestamps));
+  const cutoff = new Date(earliest.getFullYear(), earliest.getMonth(), earliest.getDate(), 14, 30, 0, 0);
+  if (Date.now() < cutoff.getTime()) return; // not stale yet, leave it alone
+
+  const referenceDateKey = earliest.toISOString().slice(0, 10);
+  const lockRef = ref(db, 'indoorRecess/lastAutoEndDate');
+  const txResult = await runTransaction(lockRef, (current) => {
+    if (current === referenceDateKey) return; // someone already handled this day, abort
+    return referenceDateKey;
+  });
+  if (!txResult.committed) return; // another device is handling it (or already did)
+
+  const dateLabel = earliest.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  const historyRef = push(ref(db, 'indoorRecess/history'));
+  await set(historyRef, {
+    date: dateLabel,
+    archivedAt: Date.now(),
+    autoArchived: true,
+    signups: signups
+  });
+  await remove(ref(db, 'indoorRecess/signups'));
 }
 
 function listenToSignups() {
@@ -452,7 +486,8 @@ async function loadHistory() {
     const count = Object.keys(session.signups || {}).length;
     const item = document.createElement('div');
     item.className = 'history-item';
-    item.innerHTML = `<span>${session.date}</span><span>${count} students</span>`;
+    const autoTag = session.autoArchived ? ' <span style="color:var(--muted); font-weight:500; font-size:0.75rem;">(auto-ended)</span>' : '';
+    item.innerHTML = `<span>${session.date}${autoTag}</span><span>${count} students</span>`;
     const detail = document.createElement('div');
     detail.className = 'history-detail';
 
