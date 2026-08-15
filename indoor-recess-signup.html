@@ -306,7 +306,8 @@ const firebaseConfig = {
 };
 
 const ALLOWED_DOMAIN = "cornerstonek12.org";
-const CAP_PER_ROOM = 27;
+const CAP_PER_ROOM_DEFAULT = 27;
+const CAP_PER_ROOM_EXPANDED = 36;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -346,6 +347,9 @@ let rosterFull = {};       // full bathroom/roster
 let roster7 = {};          // filtered to grade 7, keyed by roster key
 let teachers7 = [];        // grade-7 teacher names
 let conflictBlocks = {};   // bathroom/conflictBlocks
+let gymDutySchedule = {};  // indoorRecess/gymDutySchedule, date -> teacher(s) off today
+let roomsToday = [];       // teachers7 minus whoever has gym duty today
+let capToday = 27;         // cap per room today (36 when a teacher is excluded)
 let selectedKey = null;    // currently selected roster key (this student)
 let selectedName = null;   // display name e.g. "Aaradhna R."
 let signupsUnsub = null;
@@ -373,14 +377,16 @@ onAuthStateChanged(auth, async (user) => {
 });
 
 async function loadData() {
-  const [rosterSnap, teacherSnap, conflictSnap] = await Promise.all([
+  const [rosterSnap, teacherSnap, conflictSnap, gymDutySnap] = await Promise.all([
     get(ref(db, 'bathroom/roster')),
     get(ref(db, 'bathroom/teachers')),
-    get(ref(db, 'bathroom/conflictBlocks'))
+    get(ref(db, 'bathroom/conflictBlocks')),
+    get(ref(db, 'indoorRecess/gymDutySchedule'))
   ]);
   rosterFull = rosterSnap.val() || {};
   const teachersFull = teacherSnap.val() || {};
   conflictBlocks = conflictSnap.val() || {};
+  gymDutySchedule = gymDutySnap.val() || {};
 
   roster7 = {};
   Object.keys(rosterFull).forEach(k => {
@@ -390,6 +396,18 @@ async function loadData() {
   teachers7 = Object.keys(teachersFull)
     .filter(t => Number(teachersFull[t].grade) === 7)
     .sort();
+
+  computeRoomsForToday();
+}
+
+// ---------- Figure out which rooms are open today based on gym duty ----------
+function computeRoomsForToday() {
+  const todayKey = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+  const offToday = gymDutySchedule[todayKey];
+  const offSet = new Set(offToday ? (Array.isArray(offToday) ? offToday : [offToday]) : []);
+
+  roomsToday = teachers7.filter(t => !offSet.has(t));
+  capToday = offSet.size > 0 ? CAP_PER_ROOM_EXPANDED : CAP_PER_ROOM_DEFAULT;
 }
 
 // ---------- Auto-end stale sessions (after 2:30pm on the day they started) ----------
@@ -556,22 +574,28 @@ function renderRooms(signups) {
     statusEl.innerHTML = `<span class="current-badge" style="background:#eef1f6; color:var(--muted); border-color:var(--border);">${selectedName}</span>`;
     document.getElementById('room-section').classList.remove('hidden');
     roomHeading.textContent = 'Pick a room';
-    roomSub.textContent = 'Rooms close automatically at ' + CAP_PER_ROOM + ' students.';
+    roomSub.textContent = 'Rooms close automatically at ' + capToday + ' students.' + gymDutyNote();
     buildRoomGrid(counts, namesInRoom, false);
   }
+}
+
+function gymDutyNote() {
+  const offRooms = teachers7.filter(t => !roomsToday.includes(t));
+  if (offRooms.length === 0) return '';
+  return ' ' + offRooms.join(' and ') + (offRooms.length > 1 ? " aren't" : " isn't") + ' available today (gym duty).';
 }
 
 function buildRoomGrid(counts, namesInRoom, isChanging) {
   const grid = document.getElementById('room-grid');
   grid.innerHTML = '';
-  teachers7.forEach(teacher => {
+  roomsToday.forEach(teacher => {
     const count = counts[teacher] || 0;
-    const isFull = count >= CAP_PER_ROOM;
+    const isFull = count >= capToday;
     const div = document.createElement('div');
     div.className = 'room-card';
     div.innerHTML = `
       <h3>${teacher}</h3>
-      <div class="room-count ${isFull ? 'full' : ''}">${count}/${CAP_PER_ROOM}${isFull ? ' &middot; <span class="full-tag">FULL</span>' : ''}</div>
+      <div class="room-count ${isFull ? 'full' : ''}">${count}/${capToday}${isFull ? ' &middot; <span class="full-tag">FULL</span>' : ''}</div>
       <button class="join-btn" ${isFull ? 'disabled' : ''}>${isFull ? 'Room Full' : (isChanging ? 'Move Here' : 'Join Room')}</button>
     `;
     if (!isFull) {
