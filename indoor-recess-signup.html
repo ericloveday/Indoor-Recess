@@ -401,13 +401,32 @@ async function loadData() {
 }
 
 // ---------- Figure out which rooms are open today based on gym duty ----------
+function getEffectiveDateKey() {
+  const params = new URLSearchParams(window.location.search);
+  const testDate = params.get('testDate');
+  if (testDate && /^\d{4}-\d{2}-\d{2}$/.test(testDate)) return testDate;
+  return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+}
+
 function computeRoomsForToday() {
-  const todayKey = new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
+  const todayKey = getEffectiveDateKey();
   const offToday = gymDutySchedule[todayKey];
   const offSet = new Set(offToday ? (Array.isArray(offToday) ? offToday : [offToday]) : []);
 
   roomsToday = teachers7.filter(t => !offSet.has(t));
   capToday = offSet.size > 0 ? CAP_PER_ROOM_EXPANDED : CAP_PER_ROOM_DEFAULT;
+
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('testDate')) showTestModeBanner(todayKey);
+}
+
+function showTestModeBanner(dateKey) {
+  if (document.getElementById('test-mode-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'test-mode-banner';
+  banner.style.cssText = 'background:#fff3cd; color:#7a5c00; text-align:center; padding:8px; font-weight:700; font-size:0.85rem;';
+  banner.textContent = `TEST MODE — simulating ${dateKey} (no real data affected)`;
+  document.body.insertBefore(banner, document.body.firstChild);
 }
 
 // ---------- Auto-end stale sessions (after 2:30pm on the day they started) ----------
