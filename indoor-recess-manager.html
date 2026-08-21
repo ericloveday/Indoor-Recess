@@ -42,7 +42,22 @@
   .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);}
   h2{font-size:1.2rem; font-weight:700; margin:0 0 6px;}
   p.desc{color:var(--muted); font-size:0.9rem; margin:0 0 16px;}
-  #google-signin-btn{background:var(--black); color:#fff; border:none; padding:14px 28px; border-radius:8px; font-family:inherit; font-weight:700; font-size:0.95rem; cursor:pointer;}
+  #login-form{text-align:left;}
+  #login-form label{
+    display:block; font-size:.78rem; font-weight:700; margin-bottom:6px; margin-top:12px;
+    color:var(--muted); text-transform:uppercase; letter-spacing:.3px;
+  }
+  input[type="email"], input[type="password"]{
+    width:100%; padding:12px 14px; border:1px solid var(--border); border-radius:8px;
+    font-family:inherit; font-size:0.95rem;
+  }
+  input[type="email"]:focus, input[type="password"]:focus{outline:2px solid var(--accent); border-color:var(--accent);}
+  #login-btn{
+    background:var(--black); color:#fff; border:none; padding:14px 28px; border-radius:8px;
+    font-family:inherit; font-weight:700; font-size:0.95rem; cursor:pointer; width:100%; margin-top:16px;
+  }
+  #login-btn:hover{background:#222;}
+  .contact-note{color:var(--muted); font-size:0.75rem; margin-top:14px;}
   .hidden{display:none !important;}
   .loading{text-align:center; color:var(--muted); padding:40px; font-weight:600;}
   .error-screen{color:var(--accent); font-weight:600; text-align:center; padding:20px;}
@@ -130,9 +145,16 @@
   <div id="screen-signin" class="center-screen">
     <div class="card" style="text-align:center; max-width:400px;">
       <h2>Sign in to continue</h2>
-      <p class="desc">Use your Cornerstone Google account.</p>
-      <button id="google-signin-btn">Sign in with Google</button>
+      <p class="desc">Use your staff account.</p>
+      <form id="login-form">
+        <label for="login-email">Email</label>
+        <input type="email" id="login-email" placeholder="you@cornerstonek12.org" autocomplete="username">
+        <label for="login-password">Password</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+        <button type="submit" id="login-btn">Sign In</button>
+      </form>
       <div id="signin-error" class="error-screen hidden"></div>
+      <p class="contact-note">Contact Eric Loveday for an account or a password reset.</p>
     </div>
   </div>
 
@@ -155,13 +177,9 @@
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getAuth, GoogleAuthProvider, signInWithPopup, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 import { getDatabase, ref, get, set, remove, update, push, onValue, runTransaction } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
 
-// ============================================================
-// PASTE YOUR EXISTING bathroom-check-out FIREBASE CONFIG HERE
-// (same object used across your other manager tools)
-// ============================================================
 const firebaseConfig = {
   apiKey: "AIzaSyBsja7ruNaLkTDTxyga9qd9TZG2Zz5AjHA",
   authDomain: "bathroom-check-out.firebaseapp.com",
@@ -172,15 +190,12 @@ const firebaseConfig = {
   appId: "1:385219454253:web:970acbfe28672f73c45fa4"
 };
 
-const ALLOWED_DOMAIN = "cornerstonek12.org";
 const CAP_PER_ROOM_DEFAULT = 27;
 const CAP_PER_ROOM_EXPANDED = 36;
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
-const provider = new GoogleAuthProvider();
-provider.setCustomParameters({ hd: ALLOWED_DOMAIN });
 
 const screens = {
   signin: document.getElementById('screen-signin'),
@@ -190,11 +205,25 @@ const screens = {
 function showScreen(name){ Object.values(screens).forEach(s=>s.classList.add('hidden')); screens[name].classList.remove('hidden'); }
 
 document.getElementById('signout-btn').addEventListener('click', () => signOut(auth));
-document.getElementById('google-signin-btn').addEventListener('click', async () => {
+
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
   const errEl = document.getElementById('signin-error');
   errEl.classList.add('hidden');
-  try { await signInWithPopup(auth, provider); }
-  catch(e){ errEl.textContent = "Sign-in failed. Please try again."; errEl.classList.remove('hidden'); }
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!email || !password) {
+    errEl.textContent = "Enter both email and password.";
+    errEl.classList.remove('hidden');
+    return;
+  }
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+  } catch (err) {
+    console.error(err);
+    errEl.textContent = "Sign-in failed — check your email and password and try again.";
+    errEl.classList.remove('hidden');
+  }
 });
 
 let roster7 = {};
@@ -207,14 +236,6 @@ let capToday = 27;
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) { showScreen('signin'); document.getElementById('topbar-actions').classList.add('hidden'); return; }
-  if (!user.email || !user.email.endsWith('@' + ALLOWED_DOMAIN)) {
-    await signOut(auth);
-    const errEl = document.getElementById('signin-error');
-    errEl.textContent = "Please sign in with your @" + ALLOWED_DOMAIN + " account.";
-    errEl.classList.remove('hidden');
-    showScreen('signin');
-    return;
-  }
   document.getElementById('topbar-actions').classList.remove('hidden');
   showScreen('loading');
   await loadStaticData();
