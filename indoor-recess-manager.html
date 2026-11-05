@@ -294,7 +294,7 @@ async function loadStaticData() {
 
   roster7 = {};
   Object.keys(rosterFull).forEach(k => { if (Number(rosterFull[k].grade) === 7) roster7[k] = rosterFull[k]; });
-  displayNames = buildDisplayNames(roster7);
+  displayNames = buildDisplayNames(rosterFull);
   teachers7 = Object.keys(teachersFull).filter(t => Number(teachersFull[t].grade) === 7).sort();
 
   const params = new URLSearchParams(window.location.search);
@@ -302,24 +302,38 @@ async function loadStaticData() {
 }
 
 
-// ---------- Display names: first name + first 4 letters of last name ----------
-// "Riley Galiotti" -> "Riley Gali.", "Riley Gaiser" -> "Riley Gais.", "Ava Lee" -> "Ava Lee".
-// If two students would still look the same, both get their full last name.
-// The stored roster `name` is untouched, so conflict blocks still match.
+// ---------- Display names: "First L." unless that would collide ----------
+// Most students show as "Riley G." Students who'd share a name get 4 letters of their last
+// name, all of them matching ("Riley Gali." / "Riley Gais."). If 4 letters still collide,
+// those students get their full last name. Built from the whole roster (all grades) so names
+// match the bathroom kiosk. The stored roster `name` is untouched, so conflict checks still match.
 const LAST_NAME_LETTERS = 4;
 function buildDisplayNames(roster) {
-  const out = {};
-  const shortFor = (s) => {
+  const list = Object.keys(roster).filter(k => roster[k]).map(k => ({ ...roster[k], _id: k }));
+  const idOf = (s) => s._id;
+  const fmt = (s, n) => {
     const first = (s.firstName || '').trim();
     const last = (s.lastName || '').trim();
     if (!first || !last) return s.name || '';
-    return last.length <= LAST_NAME_LETTERS ? `${first} ${last}` : `${first} ${last.slice(0, LAST_NAME_LETTERS)}.`;
+    return last.length <= n ? `${first} ${last}` : `${first} ${last.slice(0, n)}.`;
   };
-  const counts = {};
-  Object.keys(roster).forEach(k => { out[k] = shortFor(roster[k]); counts[out[k]] = (counts[out[k]] || 0) + 1; });
-  Object.keys(roster).forEach(k => {
-    const s = roster[k];
-    if (counts[out[k]] > 1 && s.firstName && s.lastName) out[k] = `${s.firstName.trim()} ${s.lastName.trim()}`;
+  const countLabels = (labels) => {
+    const c = {};
+    Object.values(labels).forEach(l => { const k = l.toLowerCase(); c[k] = (c[k] || 0) + 1; });
+    return c;
+  };
+  const out = {};
+  // Step 1: first initial for everyone
+  list.forEach(s => { out[idOf(s)] = fmt(s, 1); });
+  // Step 2: anyone sharing a name gets 4 letters
+  let counts = countLabels(out);
+  list.forEach(s => { if (counts[out[idOf(s)].toLowerCase()] > 1) out[idOf(s)] = fmt(s, LAST_NAME_LETTERS); });
+  // Step 3: still sharing after 4 letters -> full last name
+  counts = countLabels(out);
+  list.forEach(s => {
+    if (counts[out[idOf(s)].toLowerCase()] > 1 && s.firstName && s.lastName) {
+      out[idOf(s)] = `${s.firstName.trim()} ${s.lastName.trim()}`;
+    }
   });
   return out;
 }
