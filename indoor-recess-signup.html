@@ -224,6 +224,13 @@
     display:flex; align-items:center; justify-content:center; font-size:1.6rem; font-weight:800;
     margin:0 auto 14px;
   }
+  .closed-card{border-top:6px solid var(--accent);}
+  .closed-icon{
+    width:56px; height:56px; border-radius:50%; background:#fdecea; color:var(--accent);
+    display:flex; align-items:center; justify-content:center; font-size:1.5rem;
+    margin:0 auto 14px;
+  }
+  .closed-wait{color:var(--muted); font-size:0.8rem; font-weight:600; margin-top:4px;}
   .confirm-countdown{color:var(--muted); font-size:0.82rem; margin-top:14px;}
   .contact-note{color:var(--muted); font-size:0.75rem; margin-top:14px;}
 </style>
@@ -254,6 +261,16 @@
       </form>
       <div id="signin-error" class="error-screen hidden"></div>
       <p class="contact-note">Contact Eric Loveday for an account or a password reset.</p>
+    </div>
+  </div>
+
+  <!-- CLOSED SCREEN (no gym duty chosen yet today) -->
+  <div id="screen-closed" class="center-screen hidden">
+    <div class="card closed-card" style="text-align:center; max-width:440px;">
+      <div class="closed-icon">&#128274;</div>
+      <h2>Indoor recess sign-up is closed</h2>
+      <p class="desc">A teacher needs to choose who has gym duty today before sign-up can open. This page will open by itself as soon as that’s done.</p>
+      <div class="closed-wait">Waiting for a teacher...</div>
     </div>
   </div>
 
@@ -312,6 +329,7 @@ const firebaseConfig = {
 
 const CAP_PER_ROOM_DEFAULT = 27;
 const CAP_PER_ROOM_EXPANDED = 36;
+const GYM_DUTY_PATH = 'indoorRecess/gymDutyToday'; // set daily from the manager dashboard
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -320,14 +338,17 @@ const db = getDatabase(app);
 // ---------- Screen helpers ----------
 const screens = {
   signin: document.getElementById('screen-signin'),
+  closed: document.getElementById('screen-closed'),
   name: document.getElementById('screen-name'),
   rooms: document.getElementById('screen-rooms'),
   loading: document.getElementById('screen-loading'),
   confirm: document.getElementById('screen-confirm')
 };
+let currentScreen = 'signin';
 function showScreen(name) {
   Object.values(screens).forEach(s => s.classList.add('hidden'));
   screens[name].classList.remove('hidden');
+  currentScreen = name;
 }
 
 const signoutBtn = document.getElementById('signout-btn');
@@ -358,15 +379,22 @@ let rosterFull = {};       // full bathroom/roster
 let roster7 = {};          // filtered to grade 7, keyed by roster key
 let teachers7 = [];        // grade-7 teacher names
 let conflictBlocks = {};   // bathroom/conflictBlocks
-let gymDutySchedule = {};  // indoorRecess/gymDutySchedule, date -> teacher(s) off today
+let dutyRecord = null;     // indoorRecess/gymDutyToday { date, teachers, setBy, setAt }
+let signupOpen = false;    // true only when a teacher has set gym duty for today
+let offSet = new Set();    // teachers with gym duty today
 let roomsToday = [];       // teachers7 minus whoever has gym duty today
 let capToday = 27;         // cap per room today (36 when a teacher is excluded)
 let selectedKey = null;    // currently selected roster key (this student)
 let selectedName = null;   // display name e.g. "Aaradhna R."
 let signupsUnsub = null;
+let dutyUnsub = null;
+let lastSignups = {};
+let lastDateKey = null;
 
 onAuthStateChanged(auth, async (user) => {
   if (!user) {
+    if (dutyUnsub) { dutyUnsub(); dutyUnsub = null; }
+    if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
     showScreen('signin');
     signoutBtn.classList.add('hidden');
     return;
@@ -375,21 +403,18 @@ onAuthStateChanged(auth, async (user) => {
   showScreen('loading');
   await loadData();
   await autoEndStaleSessionIfNeeded();
-  showScreen('name');
-  renderNameList('');
+  listenToGymDuty(); // decides whether to show the closed notice or the name screen
 });
 
 async function loadData() {
-  const [rosterSnap, teacherSnap, conflictSnap, gymDutySnap] = await Promise.all([
+  const [rosterSnap, teacherSnap, conflictSnap] = await Promise.all([
     get(ref(db, 'bathroom/roster')),
     get(ref(db, 'bathroom/teachers')),
-    get(ref(db, 'bathroom/conflictBlocks')),
-    get(ref(db, 'indoorRecess/gymDutySchedule'))
+    get(ref(db, 'bathroom/conflictBlocks'))
   ]);
   rosterFull = rosterSnap.val() || {};
   const teachersFull = teacherSnap.val() || {};
   conflictBlocks = conflictSnap.val() || {};
-  gymDutySchedule = gymDutySnap.val() || {};
 
   roster7 = {};
   Object.keys(rosterFull).forEach(k => {
@@ -400,10 +425,11 @@ async function loadData() {
     .filter(t => Number(teachersFull[t].grade) === 7)
     .sort();
 
-  computeRoomsForToday();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('testDate')) showTestModeBanner(getEffectiveDateKey());
 }
 
-// ---------- Figure out which rooms are open today based on gym duty ----------
+// ---------- Today's gym duty (chosen on the manager dashboard, expires at midnight) ----------
 function getEffectiveDateKey() {
   const params = new URLSearchParams(window.location.search);
   const testDate = params.get('testDate');
@@ -411,24 +437,60 @@ function getEffectiveDateKey() {
   return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
 }
 
-function computeRoomsForToday() {
-  const todayKey = getEffectiveDateKey();
-  const offToday = gymDutySchedule[todayKey];
-  const offSet = new Set(offToday ? (Array.isArray(offToday) ? offToday : [offToday]) : []);
+function listenToGymDuty() {
+  if (dutyUnsub) dutyUnsub();
+  dutyUnsub = onValue(ref(db, GYM_DUTY_PATH), (snap) => {
+    dutyRecord = snap.val();
+    applyDutyRecord();
+  });
+}
 
+function applyDutyRecord() {
+  const todayKey = getEffectiveDateKey();
+  lastDateKey = todayKey;
+  if (dutyRecord && dutyRecord.date === todayKey) {
+    signupOpen = true;
+    const t = dutyRecord.teachers;
+    const list = Array.isArray(t) ? t : (t ? Object.values(t) : []);
+    offSet = new Set(list);
+  } else {
+    // Nothing set, or it's left over from a previous day = closed
+    signupOpen = false;
+    offSet = new Set();
+  }
   roomsToday = teachers7.filter(t => !offSet.has(t));
   capToday = offSet.size > 0 ? CAP_PER_ROOM_EXPANDED : CAP_PER_ROOM_DEFAULT;
-
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('testDate')) showTestModeBanner(todayKey);
+  onOpenStateChanged();
 }
+
+function onOpenStateChanged() {
+  if (!auth.currentUser) return;
+  if (!signupOpen) {
+    if (countdownInterval) { clearInterval(countdownInterval); countdownInterval = null; }
+    if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
+    selectedKey = null;
+    selectedName = null;
+    showScreen('closed');
+    return;
+  }
+  if (currentScreen === 'closed' || currentScreen === 'loading') {
+    resetToStart();
+  } else if (currentScreen === 'rooms') {
+    renderRooms(lastSignups); // gym duty changed mid-pick: refresh rooms and caps
+  }
+}
+
+// If the kiosk is left open overnight, close sign-up at midnight
+setInterval(() => {
+  if (auth.currentUser && lastDateKey && getEffectiveDateKey() !== lastDateKey) applyDutyRecord();
+}, 60000);
 
 function showTestModeBanner(dateKey) {
   if (document.getElementById('test-mode-banner')) return;
   const banner = document.createElement('div');
   banner.id = 'test-mode-banner';
   banner.style.cssText = 'background:#fff3cd; color:#7a5c00; text-align:center; padding:8px; font-weight:700; font-size:0.85rem;';
-  banner.textContent = `TEST MODE — simulating ${dateKey} (no real data affected)`;
+  banner.textContent = `TEST MODE — simulating ${dateKey} (sign-ups still save to the live database)`;
   document.body.insertBefore(banner, document.body.firstChild);
 }
 
@@ -495,6 +557,7 @@ function renderNameList(query) {
 document.getElementById('switch-student').addEventListener('click', resetToStart);
 
 function selectStudent(key) {
+  if (!signupOpen) { showScreen('closed'); return; }
   selectedKey = key;
   selectedName = roster7[key].name;
   showScreen('rooms');
@@ -510,6 +573,7 @@ function resetToStart() {
   selectedKey = null;
   selectedName = null;
   nameSearchInput.value = '';
+  if (!signupOpen) { showScreen('closed'); return; }
   showScreen('name');
   renderNameList('');
 }
@@ -539,7 +603,8 @@ document.getElementById('confirm-done-btn').addEventListener('click', resetToSta
 function listenToSignups() {
   if (signupsUnsub) signupsUnsub();
   signupsUnsub = onValue(ref(db, 'indoorRecess/signups'), (snap) => {
-    renderRooms(snap.val() || {});
+    lastSignups = snap.val() || {};
+    renderRooms(lastSignups);
   });
 }
 
@@ -554,11 +619,13 @@ function getBlockedNamesFor(name) {
 }
 
 function renderRooms(signups) {
+  if (!selectedKey) return;
   const roomHeading = document.getElementById('room-heading');
   const roomSub = document.getElementById('room-sub');
   const statusEl = document.getElementById('current-status');
   const warningBox = document.getElementById('warning-box');
   warningBox.style.display = 'none';
+  roomSub.textContent = 'Rooms close automatically at ' + capToday + ' students.' + gymDutyNote();
 
   // Count per room + collect names per room
   const counts = {};
@@ -576,13 +643,13 @@ function renderRooms(signups) {
 
   // Status banner
   if (mySignup) {
+    const myRoomClosed = !roomsToday.includes(mySignup.room);
     statusEl.innerHTML = `<span class="current-badge">Signed up as ${selectedName}</span>
       <h2 style="margin-top:6px;">You're in ${mySignup.room}'s room</h2>
       <div class="btn-row">
         <button class="btn-secondary" id="change-room-btn">Change Room</button>
         <button class="btn-secondary btn-danger" id="cancel-signup-btn">Cancel Sign-Up</button>
       </div>`;
-    document.getElementById('room-section').classList.add('hidden');
     document.getElementById('change-room-btn').addEventListener('click', () => {
       document.getElementById('room-section').classList.remove('hidden');
       roomHeading.textContent = 'Choose a new room';
@@ -592,17 +659,27 @@ function renderRooms(signups) {
       await remove(ref(db, 'indoorRecess/signups/' + selectedKey));
       showConfirmation('Your sign-up has been cancelled.');
     });
+
+    if (myRoomClosed) {
+      // A teacher picked this room for gym duty after the student signed up
+      warningBox.style.display = 'block';
+      warningBox.textContent = `${mySignup.room} has gym duty today, so that room is closed. Please choose a new room.`;
+      document.getElementById('room-section').classList.remove('hidden');
+      roomHeading.textContent = 'Choose a new room';
+      buildRoomGrid(counts, namesInRoom, true);
+    } else {
+      document.getElementById('room-section').classList.add('hidden');
+    }
   } else {
     statusEl.innerHTML = `<span class="current-badge" style="background:#eef1f6; color:var(--muted); border-color:var(--border);">${selectedName}</span>`;
     document.getElementById('room-section').classList.remove('hidden');
     roomHeading.textContent = 'Pick a room';
-    roomSub.textContent = 'Rooms close automatically at ' + capToday + ' students.' + gymDutyNote();
     buildRoomGrid(counts, namesInRoom, false);
   }
 }
 
 function gymDutyNote() {
-  const offRooms = teachers7.filter(t => !roomsToday.includes(t));
+  const offRooms = teachers7.filter(t => offSet.has(t));
   if (offRooms.length === 0) return '';
   return ' ' + offRooms.join(' and ') + (offRooms.length > 1 ? " aren't" : " isn't") + ' available today (gym duty).';
 }
@@ -628,9 +705,16 @@ function buildRoomGrid(counts, namesInRoom, isChanging) {
 }
 
 async function attemptJoin(teacher, currentNamesInRoom) {
+  const warningBox = document.getElementById('warning-box');
+
+  if (!signupOpen || !roomsToday.includes(teacher)) {
+    warningBox.style.display = 'block';
+    warningBox.textContent = "That room isn't available right now - please pick a different room.";
+    return;
+  }
+
   const blocked = getBlockedNamesFor(selectedName);
   const conflict = currentNamesInRoom.find(n => blocked.has(n));
-  const warningBox = document.getElementById('warning-box');
 
   if (conflict) {
     warningBox.style.display = 'block';
