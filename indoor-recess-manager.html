@@ -37,6 +37,8 @@
   .btn-accent:hover{background:#a71805;}
   .btn-outline{background:#fff; border:1px solid var(--border); color:var(--text);}
   .btn-outline:hover{background:var(--bg);}
+  .btn-danger-outline{color:var(--accent); border-color:#f0c4bc;}
+  .btn-danger-outline:hover{background:#fdf1ef;}
   .wrap{max-width:1200px; margin:0 auto; padding:24px 16px 60px;}
   .center-screen{display:flex; align-items:center; justify-content:center; min-height:70vh;}
   .card{background:var(--card); border:1px solid var(--border); border-radius:14px; padding:22px; margin-bottom:18px; box-shadow:0 1px 3px rgba(0,0,0,0.04);}
@@ -62,6 +64,22 @@
   .loading{text-align:center; color:var(--muted); padding:40px; font-weight:600;}
   .error-screen{color:var(--accent); font-weight:600; text-align:center; padding:20px;}
 
+  /* ---------- Gym duty card ---------- */
+  .duty-card{border-left:6px solid var(--accent);}
+  .duty-card.open{border-left-color:var(--green);}
+  .duty-summary{display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap;}
+  .duty-summary h2{color:var(--green);}
+  .duty-options{display:flex; flex-wrap:wrap; gap:10px; margin:4px 0 16px;}
+  .duty-option{
+    display:flex; align-items:center; gap:8px; padding:10px 14px;
+    border:1px solid var(--border); border-radius:8px; background:var(--bg);
+    font-weight:700; font-size:0.92rem; cursor:pointer; user-select:none;
+  }
+  .duty-option input{width:18px; height:18px; accent-color:var(--accent); cursor:pointer; margin:0;}
+  .duty-option.checked{border-color:var(--accent); background:#fdecea;}
+  .duty-actions{display:flex; gap:10px; flex-wrap:wrap;}
+  .duty-actions .btn{padding:10px 18px; font-size:0.88rem;}
+
   .summary-bar{
     display:flex; gap:14px; margin-bottom:18px; flex-wrap:wrap;
   }
@@ -81,6 +99,10 @@
   .room-col-header h3{margin:0; font-size:1.05rem; font-weight:800;}
   .count-badge{font-size:0.82rem; font-weight:700; padding:3px 10px; border-radius:20px; background:#eef1f6; color:var(--muted);}
   .count-badge.full{background:#fdecea; color:var(--accent);}
+  .move-note{
+    background:#fdecea; color:var(--accent); border:1px solid #f0c4bc; border-radius:7px;
+    padding:8px 10px; font-size:0.8rem; font-weight:700; margin-bottom:8px;
+  }
   .student-row{
     display:flex; align-items:center; justify-content:space-between;
     padding:8px 10px; border-radius:7px; background:var(--bg); margin-bottom:6px; font-size:0.88rem; font-weight:600;
@@ -161,10 +183,11 @@
   <div id="screen-loading" class="loading hidden">Loading...</div>
 
   <div id="screen-dashboard" class="hidden">
+    <div class="card duty-card" id="duty-card"></div>
     <div class="summary-bar" id="summary-bar"></div>
     <div class="room-columns" id="room-columns"></div>
 
-    <div class="card hidden" id="history-card">
+    <div class="card hidden" id="history-card" style="margin-top:18px;">
       <h2>Past Sessions</h2>
       <p class="desc">Click a session to see who went where that day.</p>
       <div class="history-list" id="history-list"></div>
@@ -192,6 +215,7 @@ const firebaseConfig = {
 
 const CAP_PER_ROOM_DEFAULT = 27;
 const CAP_PER_ROOM_EXPANDED = 36;
+const GYM_DUTY_PATH = 'indoorRecess/gymDutyToday'; // { date:'YYYY-MM-DD', teachers:[...], setBy, setAt }
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
@@ -230,40 +254,52 @@ let roster7 = {};
 let teachers7 = [];
 let conflictBlocks = {};
 let currentSignups = {};
-let gymDutySchedule = {};
+let dutyRecord = null;       // raw value of indoorRecess/gymDutyToday
+let signupOpen = false;      // true only when dutyRecord.date === today
+let offSet = new Set();      // teachers with gym duty today
 let roomsToday = [];
-let capToday = 27;
+let capToday = CAP_PER_ROOM_DEFAULT;
+let editingDuty = false;
+let lastDateKey = null;
+let dutyUnsub = null;
+let signupsUnsub = null;
 
 onAuthStateChanged(auth, async (user) => {
-  if (!user) { showScreen('signin'); document.getElementById('topbar-actions').classList.add('hidden'); return; }
+  if (!user) {
+    if (dutyUnsub) { dutyUnsub(); dutyUnsub = null; }
+    if (signupsUnsub) { signupsUnsub(); signupsUnsub = null; }
+    showScreen('signin');
+    document.getElementById('topbar-actions').classList.add('hidden');
+    return;
+  }
   document.getElementById('topbar-actions').classList.remove('hidden');
   showScreen('loading');
   await loadStaticData();
   await autoEndStaleSessionIfNeeded();
   showScreen('dashboard');
+  listenToGymDuty();
   listenToSignups();
 });
 
 async function loadStaticData() {
-  const [rosterSnap, teacherSnap, conflictSnap, gymDutySnap] = await Promise.all([
+  const [rosterSnap, teacherSnap, conflictSnap] = await Promise.all([
     get(ref(db, 'bathroom/roster')),
     get(ref(db, 'bathroom/teachers')),
-    get(ref(db, 'bathroom/conflictBlocks')),
-    get(ref(db, 'indoorRecess/gymDutySchedule'))
+    get(ref(db, 'bathroom/conflictBlocks'))
   ]);
   const rosterFull = rosterSnap.val() || {};
   const teachersFull = teacherSnap.val() || {};
   conflictBlocks = conflictSnap.val() || {};
-  gymDutySchedule = gymDutySnap.val() || {};
 
   roster7 = {};
   Object.keys(rosterFull).forEach(k => { if (Number(rosterFull[k].grade) === 7) roster7[k] = rosterFull[k]; });
   teachers7 = Object.keys(teachersFull).filter(t => Number(teachersFull[t].grade) === 7).sort();
 
-  computeRoomsForToday();
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('testDate')) showTestModeBanner(getEffectiveDateKey());
 }
 
-// ---------- Figure out which rooms are open today based on gym duty ----------
+// ---------- Today's gym duty (chosen by a teacher, expires at midnight) ----------
 function getEffectiveDateKey() {
   const params = new URLSearchParams(window.location.search);
   const testDate = params.get('testDate');
@@ -271,16 +307,134 @@ function getEffectiveDateKey() {
   return new Date().toLocaleDateString('en-CA'); // YYYY-MM-DD, local time
 }
 
-function computeRoomsForToday() {
-  const todayKey = getEffectiveDateKey();
-  const offToday = gymDutySchedule[todayKey];
-  const offSet = new Set(offToday ? (Array.isArray(offToday) ? offToday : [offToday]) : []);
+function listenToGymDuty() {
+  if (dutyUnsub) dutyUnsub();
+  dutyUnsub = onValue(ref(db, GYM_DUTY_PATH), (snap) => {
+    dutyRecord = snap.val();
+    applyDutyRecord();
+  });
+}
 
+function applyDutyRecord() {
+  const todayKey = getEffectiveDateKey();
+  lastDateKey = todayKey;
+  if (dutyRecord && dutyRecord.date === todayKey) {
+    signupOpen = true;
+    const t = dutyRecord.teachers;
+    const list = Array.isArray(t) ? t : (t ? Object.values(t) : []);
+    offSet = new Set(list);
+  } else {
+    // Missing, or left over from a previous day = expired
+    signupOpen = false;
+    offSet = new Set();
+    editingDuty = false;
+  }
   roomsToday = teachers7.filter(t => !offSet.has(t));
   capToday = offSet.size > 0 ? CAP_PER_ROOM_EXPANDED : CAP_PER_ROOM_DEFAULT;
 
-  const params = new URLSearchParams(window.location.search);
-  if (params.get('testDate')) showTestModeBanner(todayKey);
+  if (!editingDuty) renderDutyCard();
+  renderDashboard();
+}
+
+// If the dashboard is left open overnight, close sign-up at midnight
+setInterval(() => {
+  if (auth.currentUser && lastDateKey && getEffectiveDateKey() !== lastDateKey) applyDutyRecord();
+}, 60000);
+
+function renderDutyCard() {
+  const card = document.getElementById('duty-card');
+  const showSummary = signupOpen && !editingDuty;
+  card.classList.toggle('open', showSummary);
+
+  if (showSummary) {
+    const off = [...offSet];
+    const who = off.length ? off.join(', ') : 'No one';
+    const setBy = dutyRecord && dutyRecord.setBy ? ` &middot; set by ${dutyRecord.setBy}` : '';
+    card.innerHTML = `
+      <div class="duty-summary">
+        <div>
+          <h2>Sign-up is open</h2>
+          <p class="desc" style="margin:0;">Gym duty today: <strong style="color:var(--text);">${who}</strong> &middot; Rooms cap at ${capToday}${setBy}</p>
+        </div>
+        <button class="btn btn-outline" id="duty-change-btn">Change</button>
+      </div>`;
+    document.getElementById('duty-change-btn').addEventListener('click', () => {
+      editingDuty = true;
+      renderDutyCard();
+    });
+    return;
+  }
+
+  const preChecked = editingDuty ? offSet : new Set();
+  card.innerHTML = `
+    <h2>${signupOpen ? 'Change today’s gym duty' : 'Indoor recess sign-up is closed'}</h2>
+    <p class="desc">Check the teacher(s) with gym duty today. Their rooms won’t take students, and the other rooms open up to ${CAP_PER_ROOM_EXPANDED}. This resets at midnight, so it needs to be set each indoor recess day.</p>
+    <div class="duty-options">
+      ${teachers7.map(t => `
+        <label class="duty-option ${preChecked.has(t) ? 'checked' : ''}">
+          <input type="checkbox" value="${t}" ${preChecked.has(t) ? 'checked' : ''}>
+          ${t}
+        </label>`).join('')}
+    </div>
+    <div class="duty-actions">
+      <button class="btn btn-accent" id="duty-save-btn">${signupOpen ? 'Save Changes' : 'Open Sign-Up'}</button>
+      ${signupOpen ? `
+        <button class="btn btn-outline" id="duty-cancel-btn">Cancel</button>
+        <button class="btn btn-outline btn-danger-outline" id="duty-close-btn">Close Sign-Up</button>` : ''}
+    </div>`;
+
+  card.querySelectorAll('.duty-option input').forEach(cb => {
+    cb.addEventListener('change', () => cb.parentElement.classList.toggle('checked', cb.checked));
+  });
+
+  document.getElementById('duty-save-btn').addEventListener('click', saveGymDuty);
+
+  if (signupOpen) {
+    document.getElementById('duty-cancel-btn').addEventListener('click', () => {
+      editingDuty = false;
+      renderDutyCard();
+    });
+    document.getElementById('duty-close-btn').addEventListener('click', async () => {
+      const ok = await showConfirmModal(
+        'Close sign-up?',
+        'Students won’t be able to sign up until someone picks gym duty again. Students already signed up stay where they are.'
+      );
+      if (!ok) return;
+      editingDuty = false;
+      await remove(ref(db, GYM_DUTY_PATH));
+    });
+  }
+}
+
+async function saveGymDuty() {
+  const card = document.getElementById('duty-card');
+  const picked = [...card.querySelectorAll('.duty-option input:checked')].map(i => i.value);
+
+  if (teachers7.length > 0 && picked.length === teachers7.length) {
+    await showConfirmModal('Every room is checked', 'At least one room needs to stay open. Uncheck a teacher and try again.');
+    return;
+  }
+  if (picked.length === 0) {
+    const ok = await showConfirmModal(
+      'No gym duty today?',
+      `All ${teachers7.length} rooms will open with a cap of ${CAP_PER_ROOM_DEFAULT}.`
+    );
+    if (!ok) return;
+  }
+
+  editingDuty = false;
+  try {
+    await set(ref(db, GYM_DUTY_PATH), {
+      date: getEffectiveDateKey(),
+      teachers: picked,
+      setBy: auth.currentUser ? auth.currentUser.email : '',
+      setAt: Date.now()
+    });
+  } catch (err) {
+    console.error(err);
+    editingDuty = true;
+    await showConfirmModal('Couldn’t save', 'The gym duty choice didn’t save. Check your connection and try again.');
+  }
 }
 
 function showTestModeBanner(dateKey) {
@@ -288,7 +442,7 @@ function showTestModeBanner(dateKey) {
   const banner = document.createElement('div');
   banner.id = 'test-mode-banner';
   banner.style.cssText = 'background:#fff3cd; color:#7a5c00; text-align:center; padding:8px; font-weight:700; font-size:0.85rem;';
-  banner.textContent = `TEST MODE — simulating ${dateKey} (no real data affected)`;
+  banner.textContent = `TEST MODE — simulating ${dateKey} (sign-ups and gym duty still save to the live database)`;
   document.body.insertBefore(banner, document.body.firstChild);
 }
 
@@ -325,7 +479,8 @@ async function autoEndStaleSessionIfNeeded() {
 }
 
 function listenToSignups() {
-  onValue(ref(db, 'indoorRecess/signups'), (snap) => {
+  if (signupsUnsub) signupsUnsub();
+  signupsUnsub = onValue(ref(db, 'indoorRecess/signups'), (snap) => {
     currentSignups = snap.val() || {};
     renderDashboard();
   });
@@ -342,6 +497,8 @@ function getBlockedNamesFor(name) {
 }
 
 function renderDashboard() {
+  if (screens.dashboard.classList.contains('hidden')) return;
+
   // Group signups by room
   const byRoom = {};
   teachers7.forEach(t => byRoom[t] = []);
@@ -354,11 +511,12 @@ function renderDashboard() {
   const totalSignedUp = Object.keys(currentSignups).length;
   const totalRoster = Object.keys(roster7).length;
   const summaryBar = document.getElementById('summary-bar');
-  const offToday = teachers7.filter(t => !roomsToday.includes(t));
+  const offToday = teachers7.filter(t => offSet.has(t));
   summaryBar.innerHTML = `
+    <div class="summary-pill" style="color:${signupOpen ? 'var(--green)' : 'var(--accent)'};">${signupOpen ? 'Open' : 'Closed'}<span>Sign-Up Status</span></div>
     <div class="summary-pill">${totalSignedUp}<span>Signed Up</span></div>
     <div class="summary-pill">${totalRoster - totalSignedUp}<span>Not Signed Up</span></div>
-    <div class="summary-pill">${roomsToday.length}<span>Rooms Open Today</span></div>
+    ${signupOpen ? `<div class="summary-pill">${roomsToday.length}<span>Rooms Open Today</span></div>` : ''}
     ${offToday.length ? `<div class="summary-pill" style="color:var(--accent);">${offToday.join(', ')}<span>Gym Duty Today</span></div>` : ''}
   `;
 
@@ -366,7 +524,7 @@ function renderDashboard() {
   colsWrap.innerHTML = '';
 
   teachers7.forEach(teacher => {
-    const isOpenToday = roomsToday.includes(teacher);
+    const isOpenToday = !offSet.has(teacher);
     const cap = isOpenToday ? capToday : CAP_PER_ROOM_DEFAULT;
     const students = (byRoom[teacher] || []).sort((a,b) => a.name.localeCompare(b.name));
     const namesInRoom = students.map(s => s.name);
@@ -375,11 +533,14 @@ function renderDashboard() {
 
     const col = document.createElement('div');
     col.className = 'room-col';
-    if (!isOpenToday) col.style.opacity = '0.6';
+    if (!isOpenToday) col.style.opacity = count > 0 ? '1' : '0.6';
 
     let rowsHtml = '';
+    if (!isOpenToday && count > 0) {
+      rowsHtml += `<div class="move-note">&#9888; Gym duty today &mdash; move ${count === 1 ? 'this student' : 'these ' + count + ' students'} to an open room</div>`;
+    }
     if (students.length === 0) {
-      rowsHtml = '<div class="empty-room">No one signed up yet</div>';
+      rowsHtml += '<div class="empty-room">No one signed up yet</div>';
     } else {
       students.forEach(s => {
         const blocked = getBlockedNamesFor(s.name);
@@ -449,6 +610,13 @@ async function addStudentToRoom(key, student, room, currentRoom) {
     const confirmed = await showConfirmModal(
       'Move student?',
       `${student.name} is currently in ${currentRoom}'s room. Move them to ${room}'s room instead?`
+    );
+    if (!confirmed) return;
+  }
+  if (offSet.has(room)) {
+    const confirmed = await showConfirmModal(
+      'Gym duty room',
+      `${room} has gym duty today. Add ${student.name} to that room anyway?`
     );
     if (!confirmed) return;
   }
