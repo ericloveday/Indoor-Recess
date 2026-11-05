@@ -251,6 +251,7 @@ document.getElementById('login-form').addEventListener('submit', async (e) => {
 });
 
 let roster7 = {};
+let displayNames = {};
 let teachers7 = [];
 let conflictBlocks = {};
 let currentSignups = {};
@@ -293,10 +294,34 @@ async function loadStaticData() {
 
   roster7 = {};
   Object.keys(rosterFull).forEach(k => { if (Number(rosterFull[k].grade) === 7) roster7[k] = rosterFull[k]; });
+  displayNames = buildDisplayNames(roster7);
   teachers7 = Object.keys(teachersFull).filter(t => Number(teachersFull[t].grade) === 7).sort();
 
   const params = new URLSearchParams(window.location.search);
   if (params.get('testDate')) showTestModeBanner(getEffectiveDateKey());
+}
+
+
+// ---------- Display names: first name + first 4 letters of last name ----------
+// "Riley Galiotti" -> "Riley Gali.", "Riley Gaiser" -> "Riley Gais.", "Ava Lee" -> "Ava Lee".
+// If two students would still look the same, both get their full last name.
+// The stored roster `name` is untouched, so conflict blocks still match.
+const LAST_NAME_LETTERS = 4;
+function buildDisplayNames(roster) {
+  const out = {};
+  const shortFor = (s) => {
+    const first = (s.firstName || '').trim();
+    const last = (s.lastName || '').trim();
+    if (!first || !last) return s.name || '';
+    return last.length <= LAST_NAME_LETTERS ? `${first} ${last}` : `${first} ${last.slice(0, LAST_NAME_LETTERS)}.`;
+  };
+  const counts = {};
+  Object.keys(roster).forEach(k => { out[k] = shortFor(roster[k]); counts[out[k]] = (counts[out[k]] || 0) + 1; });
+  Object.keys(roster).forEach(k => {
+    const s = roster[k];
+    if (counts[out[k]] > 1 && s.firstName && s.lastName) out[k] = `${s.firstName.trim()} ${s.lastName.trim()}`;
+  });
+  return out;
 }
 
 // ---------- Today's gym duty (chosen by a teacher, expires at midnight) ----------
@@ -505,7 +530,7 @@ function renderDashboard() {
   Object.entries(currentSignups).forEach(([key, s]) => {
     if (!s || !s.room) return;
     if (!byRoom[s.room]) byRoom[s.room] = [];
-    byRoom[s.room].push({ key, ...s });
+    byRoom[s.room].push({ key, ...s, display: displayNames[key] || s.name || '' });
   });
 
   const totalSignedUp = Object.keys(currentSignups).length;
@@ -526,7 +551,7 @@ function renderDashboard() {
   teachers7.forEach(teacher => {
     const isOpenToday = !offSet.has(teacher);
     const cap = isOpenToday ? capToday : CAP_PER_ROOM_DEFAULT;
-    const students = (byRoom[teacher] || []).sort((a,b) => a.name.localeCompare(b.name));
+    const students = (byRoom[teacher] || []).sort((a,b) => a.display.localeCompare(b.display));
     const namesInRoom = students.map(s => s.name);
     const count = students.length;
     const isFull = count >= cap;
@@ -549,7 +574,7 @@ function renderDashboard() {
           <div class="student-row ${hasConflict ? 'conflict' : ''}" data-key="${s.key}">
             <span class="student-name-wrap">
               ${hasConflict ? '<span class="conflict-flag" title="Conflict: a blocked groupmate is in this room">&#9888;</span>' : ''}
-              ${s.name}
+              ${s.display}
             </span>
             <button class="remove-x" data-key="${s.key}" title="Remove">&times;</button>
           </div>`;
@@ -585,7 +610,7 @@ function renderDashboard() {
       dropdown.innerHTML = '';
       if (!q) { dropdown.classList.add('hidden'); return; }
       const matches = Object.entries(roster7)
-        .filter(([k,v]) => v.name.toLowerCase().includes(q))
+        .filter(([k,v]) => (displayNames[k] || '').toLowerCase().includes(q) || (v.name || '').toLowerCase().includes(q))
         .slice(0, 12);
       if (matches.length === 0) { dropdown.classList.add('hidden'); return; }
       dropdown.classList.remove('hidden');
@@ -593,7 +618,7 @@ function renderDashboard() {
         const item = document.createElement('div');
         item.className = 'add-dropdown-item';
         const currentRoom = currentSignups[k] ? currentSignups[k].room : null;
-        item.textContent = v.name + (currentRoom ? ' (currently: ' + currentRoom + ')' : '');
+        item.textContent = (displayNames[k] || v.name) + (currentRoom ? ' (currently: ' + currentRoom + ')' : '');
         item.addEventListener('click', () => {
           addStudentToRoom(k, v, input.dataset.room, currentRoom);
           input.value = '';
